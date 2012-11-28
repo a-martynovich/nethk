@@ -11,6 +11,7 @@
 #include "mincrt/mincrt.h"
 #include "nethk.h"
 #include "handlers.h"
+#include "cbuf.h"
 
 #if defined(_TRACE_NETHK)
 	#define TRACE odprintfW
@@ -35,130 +36,66 @@ typedef struct _OVERLAP_DATA {
 	SOCKET s;
 } OVERLAP_DATA;
 
-CRITICAL_SECTION CriticalSection; 
+CRITICAL_SECTION csFilter, csWait; 
 
 /*
- * _handle_data: outputs nicely formatted data.
- * If OUTPUT_PIPE is defined, it sends data to the pipe as follows:
- * 
- * <op><alen><addr><data>
- * 
- * where <op> is operation code (s, r, t, f, see below), <addr> is
- * the human-readable target address as WCHAR string, <alen> is the 
- * length of <addr>, <data> is raw content
+ * _handle_data: 
+ *	Calls user-defined handlers in the order they were added. If a handler
+ *	returns a result other than FI_PASS, no other handlers will be called.
+ *	Otherwise, a next added handler will be called.
+ * Returns: 
+ *	FI_PASS if all handlers returned FI_PASS; otherwise, the return value
+ *	of the handler which returned non-FI_PASS.
  */
-enum nethk_filter _handle_data(LPOPERATION op) {
-	/*if(!op->lpNumberOfBytesRecvd || !op->lpBuffers) {
-		TRACE(L"_handle_data: some fields are NULL");
-		return FI_ERROR;
-	}*/
-{		
+
+enum nethk_filter _handle_data(LPOPERATION op) {	
 	nethk_handler* cur = handlers_first;
 	while(cur) {
 		if(cur->filter) {
 			enum nethk_filter result;
 			if((cur->family==AF_UNSPEC || cur->family==op->lpAddr->sa_family) &&
 				(cur->proto==IPPROTO_IP || cur->proto==op->proto)) {
-				result = cur->filter(op);
+				EnterCriticalSection(&csFilter);
+					result = cur->filter(op);
+				LeaveCriticalSection(&csFilter);
 				if(result!=FI_PASS)
 					return result;
 			}
 		}
 		cur = cur->next;
 	}
-	return FI_PASS;
-#if 0//defined(OUTPUT_PIPE) || defined(OUTPUT_DEBUG)		
-	int numberOfBytesRecvd = *op->lpNumberOfBytesRecvd, bytes_to_send = 2 + numberOfBytesRecvd, i=0, pos=2, addr_string_len=254;
-	int _err;
-	static WCHAR addr_string[255];
-	static char* recv_data = 0;
-	static int recv_data_size = 0;
-	
-	TRACE(L"handle_data: dwBufferCount=%d, NumberOfBytesRecvd=%d", op->dwBufferCount, numberOfBytesRecvd);		
-	if(!op->lpAddr || !op->lpAddrLen) {
-		addr_string_len = 2;
-		addr_string[0] = L'\0';
-	}
-	else {
-		orig_WSPAddressToString((LPSOCKADDR)op->lpAddr, *op->lpAddrLen, NULL, addr_string, &addr_string_len, &_err);
-		addr_string_len*=2;
-	}
-#ifdef OUTPUT_PIPE
-	bytes_to_send +=addr_string_len;
-	pos += addr_string_len;
-
-	//EnterCriticalSection(&CriticalSection);
-	if(!recv_data)
-		recv_data = mem_alloc(bytes_to_send);
-	else if (bytes_to_send > recv_data_size) {
-		mem_realloc(&recv_data, bytes_to_send);
-		recv_data_size = bytes_to_send;
-	}
-	//recv_data = mem_alloc(bytes_to_send);
-
-	recv_data[0] = op->op;
-	recv_data[1] = (unsigned char)(addr_string_len/2);
-	bytes_to_send -=2;
-
-	mem_cpy(recv_data+2, addr_string, addr_string_len);
-	bytes_to_send -= addr_string_len;
-
-	for(i=0; i < op->dwBufferCount; i++) {			
-		DWORD bytes_to_copy = op->lpBuffers[i].len > numberOfBytesRecvd? numberOfBytesRecvd: op->lpBuffers[i].len;
-		mem_cpy(recv_data+pos, op->lpBuffers[i].buf, bytes_to_copy);					
-		bytes_to_send -= bytes_to_copy;
-		if(bytes_to_send < 0) {
-			TRACE(L"handle_data: buffer overflow");
-			break;
-		}
-		pos += bytes_to_copy;
-	}
-	_write_pipe(recv_data, pos);
-	//LeaveCriticalSection(&CriticalSection);
-	//mem_free(recv_data);
-#else
-	switch(op->op) {
-	case 'r':
-	case 'f':
-		odprintfW(L"--- recv from %s ---", addr_string);
-		break;
-	case 's':
-	case 't':
-		odprintfW(L"--- send to %s ---", addr_string);
-		break;
-	}
-	if(!recv_data)
-		recv_data = mem_alloc(bytes_to_send);
-	else if (bytes_to_send > recv_data_size) {
-		mem_realloc(&recv_data, bytes_to_send);
-		recv_data_size = bytes_to_send;
-	}
-	pos = 0; bytes_to_send = numberOfBytesRecvd;
-	for(i=0; i < op->dwBufferCount; i++) {			
-		DWORD bytes_to_copy = op->lpBuffers[i].len > numberOfBytesRecvd? numberOfBytesRecvd: op->lpBuffers[i].len;
-		mem_cpy(recv_data+pos, op->lpBuffers[i].buf, bytes_to_copy);					
-		bytes_to_send -= bytes_to_copy;
-		if(bytes_to_send < 0) {
-			TRACE(L"handle_data: buffer overflow");
-			break;
-		}
-		pos += bytes_to_copy;
-	}
-	OutputDebugStringA(_format_data(numberOfBytesRecvd, recv_data));
-	OutputDebugStringA("\n");
-#endif // ifdef OUTPUT_PIPE
-#endif // if defined(OUTPUT_PIPE) || defined(OUTPUT_DEBUG)		
+	return FI_PASS;	
 }
+
+typedef DWORD (WINAPI * lpWaitForSingleObject) (
+	_In_  HANDLE hHandle,
+	_In_  DWORD dwMilliseconds
+	);
+lpWaitForSingleObject orig_WaitForSingleObject = WaitForSingleObject;
+DWORD WINAPI _my_WaitForSingleObject(
+	_In_  HANDLE hHandle,
+	_In_  DWORD dwMilliseconds
+	) {
+		return orig_WaitForSingleObject(hHandle, dwMilliseconds);
 }
 
 LPWSPPROC_TABLE tbl;
 HANDLE hWS32;
+#define NETHK_OPERATIONS_N 1024
+nethk_sockbuf operations[NETHK_OPERATIONS_N];
 
 /*
  * see nethk.h for description
  */
 BOOL nethk_install() {
 	BOOL success = TRUE;
+	DWORD i;
+	for(i=0; i<NETHK_OPERATIONS_N; i++) {
+		operations[i].s = INVALID_SOCKET;
+		operations[i].userdata = NULL;
+		operations[i].rb_in = NULL;
+		operations[i].rb_out = NULL;
+	}
 	if(!mincrt_init(1024*1024)) {
 		TRACE(L"error: cannot initialize mincrt");
 		return FALSE;
@@ -166,7 +103,8 @@ BOOL nethk_install() {
 #if defined(_TRACE) && defined(_TRACE_FILE)
 	_log = fopen("c:/Temp/nethk.txt", "w");
 #endif				
-	InitializeCriticalSectionAndSpinCount(&CriticalSection, 0x00000400);
+	InitializeCriticalSectionAndSpinCount(&csFilter, 0x00000400);
+	InitializeCriticalSection(&csWait);
 	tbl = get_sockproctable();		
 	my_WSPCloseSocket = _my_WSPCloseSocket;
 	my_WSPConnect = _my_WSPConnect;
@@ -176,22 +114,18 @@ BOOL nethk_install() {
 	my_WSPSend = _my_WSPSend;
 	my_WSPSendTo = _my_WSPSendTo;	
 	orig_WSPCancelBlockingCall = tbl->lpWSPCancelBlockingCall;
-/*
-	hWS32 = LoadLibraryA("ws2_32.dll");
-	if(hWS32) {
-		_WPUCompleteOverlappedRequest = GetProcAddress(hWS32, "WPUCompleteOverlappedRequest");			
-		if(_WPUCompleteOverlappedRequest) {
-			TRACE(L"Found WPUCompleteOverlappedRequest");
-		}
-	}	
-	HOOK_IMPL_N(WPUCompleteOverlappedRequest);
-*/
+
 	Mhook_begin();	
+	success = Mhook_hook(&orig_WaitForSingleObjectEx, _my_WaitForSingleObjectEx);
 	HOOK_INSTALL(WSPAccept, tbl);		
 	HOOK_INSTALL(WSPAddressToString, tbl);
 	HOOK_INSTALL(WSPAsyncSelect, tbl);
 	HOOK_INSTALL(WSPBind, tbl);
-	//HOOK_INSTALL(WSPCancelBlockingCall, tbl);
+	
+	// This function doen't need to be intercepted. Instead, it is used in Mhook_unhook
+	// to stop any blocking operations.
+	//HOOK_INSTALL(WSPCancelBlockingCall, tbl);		
+	
 	HOOK_INSTALL(WSPCloseSocket, tbl);
 	HOOK_INSTALL(WSPCleanup, tbl);
 	HOOK_INSTALL(WSPConnect, tbl);
@@ -228,11 +162,15 @@ BOOL nethk_install() {
 BOOL nethk_uninstall() {
 	BOOL success = TRUE;
 	Mhook_begin();	
+	Mhook_unhook(&orig_WaitForSingleObjectEx);
 	HOOK_UNINSTALL(WSPAccept);		
 	HOOK_UNINSTALL(WSPAddressToString);
 	HOOK_UNINSTALL(WSPAsyncSelect);
 	HOOK_UNINSTALL(WSPBind);
+
+	// See nethk_install above for explanation
 	//HOOK_UNINSTALL(WSPCancelBlockingCall);
+
 	HOOK_UNINSTALL(WSPCloseSocket);
 	HOOK_UNINSTALL(WSPCleanup);
 	HOOK_UNINSTALL(WSPConnect);
@@ -259,6 +197,7 @@ BOOL nethk_uninstall() {
 	HOOK_UNINSTALL(WSPSocket);
 	HOOK_UNINSTALL(WSPStringToAddress);		
 	Mhook_end();	
+	mincrt_deinit();
 #if defined(_TRACE) && defined(_TRACE_FILE)		
 	fclose(_log);		
 #endif
@@ -267,32 +206,37 @@ BOOL nethk_uninstall() {
 
 enum nethk_error nethk_add_handler(nethk_handler* h) {			
 	if(!h) return E_INVALID_ARG;
-	if(handlers_last)
-		handlers_last->next = h;
-	handlers_last = h;
-	h->next = NULL;
-	if(!handlers_first) handlers_first = h;
-
+	EnterCriticalSection(&csFilter);
+		if(handlers_last)
+			handlers_last->next = h;
+		handlers_last = h;
+		h->next = NULL;
+		if(!handlers_first) handlers_first = h;
+	LeaveCriticalSection(&csFilter);
 	return E_SUCCESS;
 }
 enum nethk_error nethk_remove_handler(nethk_handler* h) {
 	nethk_handler* cur = handlers_first;
-	if(!handlers_first)
-		return E_SUCCESS;	
-	if(handlers_first==h) {
-		handlers_first = handlers_first->next;
-		return E_SUCCESS;
-	}
-	while(cur) {
-		if(cur->next==h) {
-			cur->next = cur->next->next;
-			h->next = 0;
-			return E_SUCCESS;
+	enum nethk_error _err = E_INVALID_ARG;
+	EnterCriticalSection(&csFilter);
+		if(handlers_first) {	
+			if(handlers_first==h) {
+				handlers_first = handlers_first->next;			
+				_err = E_SUCCESS;
+			} else 
+			  while(cur) {
+				if(cur->next==h) {
+					cur->next = cur->next->next;
+					h->next = 0;
+					_err = E_SUCCESS;
+					break;
+				}
+				cur = cur->next;
+			}
 		}
-		cur = cur->next;
-	}
-	// could not find desired pointer...
-	return E_INVALID_ARG;
+		// could not find desired pointer: return E_INVALID_ARG
+	LeaveCriticalSection(&csFilter);
+	return _err;
 }
 enum nethk_error nethk_get_data( const nethk_operation* op, BYTE* buf, LPDWORD len )
 {	
@@ -321,8 +265,8 @@ enum nethk_error nethk_get_data( const nethk_operation* op, BYTE* buf, LPDWORD l
 	*len = pos;
 	return result;
 }
-enum nethk_error nethk_set_data(nethk_operation* op, BYTE* buf, DWORD buflen) {
-	DWORD buf_i, pos = 0, _buflen = buflen, copied = 0;
+enum nethk_error nethk_set_data(nethk_operation* op, BYTE* buf, LPDWORD lpBuflen) {
+	DWORD buf_i, pos = 0, buflen = *lpBuflen, _buflen = buflen, copied = 0;
 	enum nethk_error res = E_SUCCESS;
 	if(!op->dwBufferCount || !op->lpBuffers)
 		return E_INVALID_ARG;
@@ -347,6 +291,7 @@ enum nethk_error nethk_set_data(nethk_operation* op, BYTE* buf, DWORD buflen) {
 	/*op->numberOfBytesRecvd = _buflen;
 	op->lpNumberOfBytesRecvd = &op->lpNumberOfBytesRecvd;*/
 	*(op->lpNumberOfBytesRecvd) = copied;
+	*lpBuflen = copied;
 	return res;
 }
 
@@ -390,25 +335,36 @@ enum nethk_error nethk_get_address_string( const nethk_operation* op, WCHAR* add
 	return E_SUCCESS;
 };
 
-void _error_message(LPWSTR lpszFunction) 
-{ 
-	// Retrieve the system error message for the last-error code
-	static WCHAR lpMsgBuf[1024];
-	static WCHAR lpDisplayBuf[1024];
-	DWORD dw = GetLastError(); 
-	HMODULE m = LoadLibrary(L"wininet.dll");
+nethk_sockbuf* _get_sockbuf(SOCKET s) {
+	int i, first_zero = -1;
+	DWORD n, _err, _optlen = sizeof(BOOL);
+	static clib_map* sockbuf_map = NULL;
+	if(!sockbuf_map)
 
-	FormatMessage(
-		//FORMAT_MESSAGE_ALLOCATE_BUFFER | 
-		FORMAT_MESSAGE_FROM_SYSTEM |
-		FORMAT_MESSAGE_IGNORE_INSERTS |
-		FORMAT_MESSAGE_FROM_HMODULE,
-		m,
-		dw,
-		MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-		lpMsgBuf,
-		1024, NULL );
-
-	wsprintfW(lpDisplayBuf, L"%s failed with error %d: %s\n", lpszFunction, dw, lpMsgBuf); 
-	TRACE(lpDisplayBuf);
+	if(orig_WSPGetSockOpt(s, SOL_SOCKET, SO_DEBUG, &n, &_optlen, &_err)) {
+		TRACE(L"Cannot get SO_DEBUG");
+		SetLastError(_err);
+		_error_message(L"WSPGetSockOpt");
+	} else if(n == 0 || n > NETHK_OPERATIONS_N) {
+		for(i=0; i<NETHK_OPERATIONS_N; i++) { 
+			if(first_zero==-1 && operations[i].s==INVALID_SOCKET) {
+				first_zero = i;
+			} else if(operations[i].s == s) {
+				n = i+1;
+				//orig_WSPSetSockOpt(s, SOL_SOCKET, SO_DEBUG, &n, sizeof(BOOL), &_err);
+				return operations + i;
+			}
+		}
+		if(first_zero!=-1) {		
+			operations[first_zero].s = s;
+			n = first_zero +1;
+			//orig_WSPSetSockOpt(s, SOL_SOCKET, SO_DEBUG, &n, sizeof(BOOL), &_err);
+			return operations + first_zero;
+		} else {
+			TRACE(L"No more sockbuf object available! Going to crash!");
+		}
+	} else {
+		return operations + n-1;
+	}
+	return NULL;	// this would be baaad
 }

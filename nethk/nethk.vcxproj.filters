@@ -57,6 +57,9 @@
     <ClInclude Include="nethk.h">
       <Filter>nethk</Filter>
     </ClInclude>
+    <ClInclude Include="cbuf.h">
+      <Filter>nethk</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="disasm\cpu.c">
@@ -90,6 +93,9 @@
       <Filter>nethk</Filter>
     </ClCompile>
     <ClCompile Include="handlers.c">
+      <Filter>nethk</Filter>
+    </ClCompile>
+    <ClCompile Include="cbuf.c">
       <Filter>nethk</Filter>
     </ClCompile>
   </ItemGroup>

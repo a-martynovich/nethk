@@ -26,8 +26,7 @@
 * CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE 
 * OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
-
-#include <windows.h>
+#include <ws2spi.h>
 #include <tlhelp32.h>
 #include "mhook.h"
 #include "../disasm/disasm.h"
@@ -371,7 +370,6 @@ BOOL WaitForInstructionPointer(PBYTE pbCode, DWORD cbBytes) {
 		return FALSE;
 	{
 		THREADENTRY32 te;
-		BOOL success;
 		te.dwSize = sizeof(te);
 		
 		if (Thread32First(hSnap, &te)) {
@@ -822,6 +820,8 @@ static DWORD DisassembleAndSkip(PVOID pFunction, DWORD dwMinLen, MHOOKS_PATCHDAT
 						break;
 					}
 				}
+			#else
+			UNREFERENCED_PARAMETER(i);
 			#endif
 
 			dwRet += pins->Length;
@@ -967,6 +967,7 @@ BOOL Mhook_hook(PVOID *ppSystemFunction, PVOID pHookFunction) {
 
 //=========================================================================
 extern void* current_hook;
+extern LPWSPCANCELBLOCKINGCALL orig_WSPCancelBlockingCall;
 
 BOOL Mhook_unhook(PVOID *ppHookedFunction) {
 	BOOL bRet = FALSE;	
@@ -974,17 +975,18 @@ BOOL Mhook_unhook(PVOID *ppHookedFunction) {
 	TRACE(L"mhooks: Mhook_Unhook: %p", *ppHookedFunction);
 
 	// get the trampoline structure that corresponds to our function	
-	if (pTrampoline) {
+	if (pTrampoline) { 
 		HANDLE hProc = GetCurrentProcess();
 		DWORD dwOldProtectSystemFunction = 0;
 		int nTries = 0;		
 		TRACE(L"mhooks: Mhook_Unhook: found struct at %p", pTrampoline);
 		while(current_hook == *ppHookedFunction || current_hook == pTrampoline->pSystemFunction || current_hook == pTrampoline->pHookFunction) {
 			int _err, _res;
-			//_res = orig_WSPCancelBlockingCall(&_err);
-			if(nTries%10==0)
+			_res = orig_WSPCancelBlockingCall(&_err);
+			if(nTries%1000==0)
 				TRACE(L"mhooks: Mhook_Unhook: waiting for the function to exit...");
-			Sleep(10);
+			nTries++;
+			//Sleep(10);
 			//if(nTries-- < 0) return FALSE;
 		}
 		/*if(!WaitForInstructionPointer(pTrampoline->pSystemFunction, pTrampoline->cbOverwrittenCode) ||

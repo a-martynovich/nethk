@@ -28,3 +28,6 @@ The DLL is now ejected after you press 'q' for the first time. If you
 eject nethk.dll, it might fail several times. It might take lots of time to
 eject it. You have 2 options: 1) be patient 2) press Ctrl+C and kill target
 process.
+
+WHATSNEW in Milestone 3:
+You can now see debug output in the console window (colored in green).

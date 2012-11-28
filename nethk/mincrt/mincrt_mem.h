@@ -40,7 +40,7 @@ int _mincrt_mem_init(size_t initial_mem_len);
  *	If the function fails, the return value is zero.
  */
 int _mincrt_mem_deinit();
-
+#ifdef MINCRT
 /*
  * Description:
  *	Allocate memory block. The content of the newly allocated block of memory
@@ -138,6 +138,16 @@ void mem_set(void* p_mem, uint8_t new_val, size_t mem_len);
 
 
 void * mem_move(void * dst, const void * src, size_t count);
+#else
+#define mem_alloc	malloc
+#define mem_cmp		memcmp
+#define mem_free	free
+#define mem_move	memmove
+#define mem_realloc(__buf, __s)	(*__buf = realloc(*__buf, __s))
+#define mem_set		memset
+#define mem_cpy		memcpy
+#endif
+void* mem_zalloc(size_t mem_size);
 //-----------------------------------------------------------------------------
 
 #ifdef __cplusplus

@@ -34,8 +34,6 @@
 #define _M_IX86_X64
 #endif
 
-BOOL Mhook_SetHook(PVOID *ppSystemFunction, PVOID pHookFunction);
-BOOL Mhook_Unhook(PVOID *ppHookedFunction);
 BOOL Mhook_begin();
 BOOL Mhook_end();
 BOOL Mhook_hook(PVOID *ppSystemFunction, PVOID pHookFunction);

@@ -21,10 +21,10 @@
 	fNAME = TBL -> lp##fNAME; \
 	orig_##fNAME = fNAME; \
 	success = success && Mhook_hook((PVOID*)&orig_##fNAME, fNAME##_handler); \
-	if(!success) \
 	TRACE(L"Hook %hs %s: orig=%p hook=%p", #fNAME, success? L"ok": L"fail", orig_##fNAME, fNAME##_handler);
 #define HOOK_UNINSTALL(fNAME) \
-	success = success && Mhook_unhook((PVOID*)&orig_##fNAME);
+	success = success && Mhook_unhook((PVOID*)&orig_##fNAME); \
+	TRACE(L"Unhook %hs %s", #fNAME, success? L"ok": L"fail");
 
 
 #define HOOK_DECL_N(fRET, fNAME, fARGS, fARGNAMES) \
@@ -205,3 +205,13 @@ int WSPAPI _my_WSPConnect	(
 int WSPAPI _my_WSPCloseSocket	(
 	SOCKET s, 
 	LPINT lpErrno				);
+
+typedef DWORD (WINAPI * lpWaitForSingleObjectEx) (
+	_In_  HANDLE hHandle,
+	_In_  DWORD dwMilliseconds,
+	_In_ BOOL bAlertable	);
+extern lpWaitForSingleObjectEx orig_WaitForSingleObjectEx;
+DWORD WINAPI _my_WaitForSingleObjectEx(
+	_In_  HANDLE hHandle,
+	_In_  DWORD dwMilliseconds,
+	_In_ BOOL bAlertable	);

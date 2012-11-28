@@ -7,6 +7,7 @@
 
 
 #include "stdafx.h"
+#pragma warning(disable: 4995)			// "sprintf is unsafe"
 #pragma warning(disable: 4996)			// "sprintf is unsafe"
 
 #include <strsafe.h>
@@ -49,13 +50,72 @@ void _error_message(LPTSTR lpszFunction)
 	LocalFree(lpDisplayBuf);
 	//ExitProcess(dw); 
 }
+void* remote_base;
+BOOL do_ReadDebugInfo = FALSE;
+DWORD WINAPI ReadDebugInfo(HANDLE hProcess) {
+	DEBUG_EVENT e;
+	static HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+	
+	CONSOLE_SCREEN_BUFFER_INFO sbinfo;
+	GetConsoleScreenBufferInfo(hConsole, &sbinfo);
+	SetConsoleCP(GetACP());
+	SetConsoleOutputCP(GetACP());
+
+	DebugActiveProcess(GetProcessId(hProcess));
+	SIZE_T nBytesRead;
+	DWORD nBytesWrittten;
+	while(do_ReadDebugInfo && WaitForDebugEvent(&e, INFINITE)) {
+		switch(e.dwDebugEventCode) {
+		case OUTPUT_DEBUG_STRING_EVENT: {
+			WORD n = e.u.DebugString.nDebugStringLength;			
+			char* buf = new char[n];
+			ReadProcessMemory(hProcess, e.u.DebugString.lpDebugStringData, buf, n, &nBytesRead);			
+
+			SetConsoleTextAttribute(hConsole,FOREGROUND_GREEN);
+			if(e.u.DebugString.fUnicode)
+				WriteConsoleW(hConsole, buf, nBytesRead-1, &nBytesWrittten, NULL);
+			else 
+				WriteConsoleA(hConsole, buf, nBytesRead-1, &nBytesWrittten, NULL);				
+				//printf("%s", buf);
+			SetConsoleTextAttribute(hConsole,sbinfo.wAttributes);			
+
+			delete[] buf;
+			ContinueDebugEvent(e.dwProcessId, e.dwThreadId, DBG_CONTINUE);
+			break;
+		}		 
+		case EXCEPTION_DEBUG_EVENT:
+			printf("Exception %x firstchance=%x flags=%x\n", e.u.Exception.ExceptionRecord.ExceptionCode, e.u.Exception.dwFirstChance, e.u.Exception.ExceptionRecord.ExceptionFlags);
+			ContinueDebugEvent(e.dwProcessId, e.dwThreadId, DBG_EXCEPTION_NOT_HANDLED);
+			if(!e.u.Exception.dwFirstChance) {
+				DebugActiveProcessStop(GetProcessId(hProcess));
+			}
+			break;
+		case UNLOAD_DLL_DEBUG_EVENT:
+			printf("Unload DLL %x remote_base=%x\n", e.u.UnloadDll.lpBaseOfDll, remote_base);
+			ContinueDebugEvent(e.dwProcessId, e.dwThreadId, DBG_EXCEPTION_NOT_HANDLED);
+			break;
+		case RIP_EVENT:			
+		case EXIT_PROCESS_DEBUG_EVENT:
+			ContinueDebugEvent(e.dwProcessId, e.dwThreadId, DBG_EXCEPTION_NOT_HANDLED);
+			DebugActiveProcessStop(GetProcessId(hProcess));
+			break;
+		default: {			
+			printf("\nDebug event %d\n", e.dwDebugEventCode);
+			ContinueDebugEvent(e.dwProcessId, e.dwThreadId, DBG_EXCEPTION_NOT_HANDLED);
+			break;
+		}}
+	}
+	DebugActiveProcessStop(GetProcessId(hProcess));
+	SetConsoleTextAttribute(hConsole,sbinfo.wAttributes);			
+	return 0;
+}
+
 
 typedef LONG ( NTAPI *_NtSuspendProcess )( IN HANDLE ProcessHandle ); 
 typedef LONG ( NTAPI *_NtResumeProcess )( IN HANDLE ProcessHandle );
 
 HMODULE InjectDLL(DWORD process_id, LPCTSTR dll_path, BOOL eject) {
-	static HANDLE process_handle;
-	static void* remote_base;
+	static HANDLE process_handle;	
 	static DWORD exit_code;
 	static bool success;
 	static HMODULE kernel32;
@@ -97,6 +157,10 @@ HMODULE InjectDLL(DWORD process_id, LPCTSTR dll_path, BOOL eject) {
 						_error_message(L"CreateRemoteThread");
 					}
 					NtResumeProcess(process_handle);
+										
+					do_ReadDebugInfo = TRUE;
+					DWORD _debugthreadid;					
+					CreateThread(NULL, 0, ReadDebugInfo, process_handle, 0, &_debugthreadid);
 				}
 			}
 			else {
@@ -185,6 +249,8 @@ HMODULE InjectDLL(DWORD process_id, LPCTSTR dll_path, BOOL eject) {
 				return NULL;
 			}
 			Sleep(100);
+			do_ReadDebugInfo = FALSE;
+			DebugActiveProcessStop(GetProcessId(process_handle));
 		}
 		return NULL;
 	}
@@ -224,68 +290,7 @@ char* _format_data(DWORD dwFileSize, char* buf) {
 }
 
 DWORD pid = 0;
-DWORD WINAPI ReadFromNethk_worker(LPVOID lpParam) {
-	UNREFERENCED_PARAMETER(lpParam);
-	char sPipeName[256];
-	sprintf(sPipeName, "\\\\.\\pipe\\Nethk%d", pid);
-	DWORD nRead, i=0, s = 1024*1024; 
-	char* buffer = new char[s];
-	WCHAR addr[256];
-
-	while(true) {		
-		HANDLE hPipe = CreateNamedPipeA(sPipeName, 
-			PIPE_ACCESS_INBOUND, 
-			PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE, 
-			PIPE_UNLIMITED_INSTANCES, 
-			0, 0, 200, NULL);
-
-		HANDLE h = OpenEvent(EVENT_MODIFY_STATE, FALSE, TEXT("Hello"));
-		SetEvent(h); 
-		printf("event fired\n");
-		CloseHandle(h);
-
-		if (!ConnectNamedPipe(hPipe, NULL))
-			return FALSE;		
-		while (true)
-		{			
-			BOOL b = ReadFile(hPipe, buffer, s, &nRead, NULL);
-			if(GetLastError() == ERROR_MORE_DATA)
-				printf("+");
-			else if(!b) break;
-			//buffer[nRead] = 0;			
-			//printf("<%d read %d bytes>\n", i++, nRead);		
-			char* buf = (char*)buffer;
-			int alen = (unsigned char)buf[1];			
-			alen *= 2;
-			memcpy(addr, buf+2, alen);
-			addr[alen] = L'\0';
-			switch(buf[0]) {
-			case 'r':
-			case 'f':
-				wprintf(L"--- receive %d bytes from %s---\n", nRead-2-alen, addr);
-				break;
-			case 's':
-			case 't':
-				wprintf(L"--- send %d bytes to %s---\n", nRead-2-alen, addr);
-				break;
-			}
-			
-			char* output = _format_data(nRead-2-alen, buf+2+alen);
-			printf("%s\n", output);
-			delete[] output;			
-		}
-	}
-}
-
 void ReadFromNethk(DWORD process_id) {
-	DWORD dwThreadID;
-	HANDLE hThread = CreateThread(
-		NULL,              // default security
-		0,                 // default stack size
-		ReadFromNethk_worker,        // name of the thread function
-		NULL,              // no thread parameters
-		0,                 // default startup flags
-		&dwThreadID);
 	printf("\nPRESS q TO EXIT\n");
 	while(_getch()!='q');
 	printf("EXITING... CTRL+C TO ABORT\n");

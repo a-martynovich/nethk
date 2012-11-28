@@ -1031,7 +1031,7 @@ BOOL X86_GetInstruction(INSTRUCTION *Instruction, U8 *Address, U32 Flags)
 	}
 
 	assert(Instruction->Address == Address);
-	assert(!Instruction->StringIndex && !Instruction->Length);
+	assert(!Instruction->Length);
 
 	Disassembler->Stage1Count++;
 	if (Flags & DISASM_ALIGNOUTPUT) Instruction->StringAligned = TRUE;

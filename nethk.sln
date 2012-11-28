@@ -1,16 +1,18 @@
 ﻿
-Microsoft Visual Studio Solution File, Format Version 11.00
-# Visual Studio 2010
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 2012
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libnethk", "nethk\nethk.vcxproj", "{D4A9CD38-A0F2-41A5-A4E4-CD510DF76666}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test", "test\test.vcxproj", "{2B6E1EDB-BA42-47E2-8BC0-0DEE1EDC0CC9}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "nethk_load", "nethk_load\nethk_load.vcxproj", "{364BCCBE-0F67-4CF8-B0BC-4903E897BA88}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "nethk_dll", "nethk_dll\nethk_dll.vcxproj", "{0F0F999D-81D9-4FF0-AFD5-35B0A9557867}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "nethk", "nethk_dll\nethk_dll.vcxproj", "{0F0F999D-81D9-4FF0-AFD5-35B0A9557867}"
 	ProjectSection(ProjectDependencies) = postProject
 		{D4A9CD38-A0F2-41A5-A4E4-CD510DF76666} = {D4A9CD38-A0F2-41A5-A4E4-CD510DF76666}
 	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "cstl", "cstl\cstl.vcxproj", "{AA2445C6-DE11-418E-A38C-B70AF111FDEF}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -56,8 +58,8 @@ Global
 		{364BCCBE-0F67-4CF8-B0BC-4903E897BA88}.Release|Win32.Build.0 = Release|Win32
 		{364BCCBE-0F67-4CF8-B0BC-4903E897BA88}.Release|x64.ActiveCfg = Release|x64
 		{364BCCBE-0F67-4CF8-B0BC-4903E897BA88}.Release|x64.Build.0 = Release|x64
-		{0F0F999D-81D9-4FF0-AFD5-35B0A9557867}.Debug mincrt|Win32.ActiveCfg = Debug|Win32
-		{0F0F999D-81D9-4FF0-AFD5-35B0A9557867}.Debug mincrt|Win32.Build.0 = Debug|Win32
+		{0F0F999D-81D9-4FF0-AFD5-35B0A9557867}.Debug mincrt|Win32.ActiveCfg = Debug mincrt|Win32
+		{0F0F999D-81D9-4FF0-AFD5-35B0A9557867}.Debug mincrt|Win32.Build.0 = Debug mincrt|Win32
 		{0F0F999D-81D9-4FF0-AFD5-35B0A9557867}.Debug mincrt|x64.ActiveCfg = Debug|Win32
 		{0F0F999D-81D9-4FF0-AFD5-35B0A9557867}.Debug|Win32.ActiveCfg = Debug|Win32
 		{0F0F999D-81D9-4FF0-AFD5-35B0A9557867}.Debug|Win32.Build.0 = Debug|Win32
@@ -66,6 +68,16 @@ Global
 		{0F0F999D-81D9-4FF0-AFD5-35B0A9557867}.Release|Win32.Build.0 = Release mincrt|Win32
 		{0F0F999D-81D9-4FF0-AFD5-35B0A9557867}.Release|x64.ActiveCfg = Release mincrt|x64
 		{0F0F999D-81D9-4FF0-AFD5-35B0A9557867}.Release|x64.Build.0 = Release mincrt|x64
+		{AA2445C6-DE11-418E-A38C-B70AF111FDEF}.Debug mincrt|Win32.ActiveCfg = Debug|Win32
+		{AA2445C6-DE11-418E-A38C-B70AF111FDEF}.Debug mincrt|Win32.Build.0 = Debug|Win32
+		{AA2445C6-DE11-418E-A38C-B70AF111FDEF}.Debug mincrt|x64.ActiveCfg = Debug|Win32
+		{AA2445C6-DE11-418E-A38C-B70AF111FDEF}.Debug|Win32.ActiveCfg = Debug|Win32
+		{AA2445C6-DE11-418E-A38C-B70AF111FDEF}.Debug|Win32.Build.0 = Debug|Win32
+		{AA2445C6-DE11-418E-A38C-B70AF111FDEF}.Debug|x64.ActiveCfg = Debug|Win32
+		{AA2445C6-DE11-418E-A38C-B70AF111FDEF}.Release|Win32.ActiveCfg = Release|Win32
+		{AA2445C6-DE11-418E-A38C-B70AF111FDEF}.Release|Win32.Build.0 = Release|Win32
+		{AA2445C6-DE11-418E-A38C-B70AF111FDEF}.Release|x64.ActiveCfg = Release|x64
+		{AA2445C6-DE11-418E-A38C-B70AF111FDEF}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

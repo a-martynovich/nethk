@@ -8,6 +8,9 @@
 #include "stdafx.h"
 #include <strsafe.h>
 
+#pragma warning(disable: 4995)
+#pragma warning(disable: 4996)
+
 void _error_message(LPTSTR lpszFunction) 
 { 
 	// Retrieve the system error message for the last-error code
@@ -44,7 +47,7 @@ void _error_message(LPTSTR lpszFunction)
 	//ExitProcess(dw); 
 }
 
-static int _check_network()
+static int _http_request(LPWSTR url)
 {
 	HINTERNET	h_internet;
 	int			result = 0;
@@ -58,73 +61,71 @@ static int _check_network()
 		HINTERNET	h_connection;
 
 		h_connection = InternetConnect(
-			h_internet, TEXT("habrahabr.ru"), INTERNET_DEFAULT_HTTP_PORT,
+			h_internet, url, INTERNET_DEFAULT_HTTP_PORT,
 			0, 0, INTERNET_SERVICE_HTTP, 0, 0
 			);
 		BOOL bHttpDecoding = TRUE;
-		InternetSetOption(h_internet, INTERNET_OPTION_HTTP_DECODING, &bHttpDecoding, sizeof(bHttpDecoding) );
+		InternetSetOption (
+			h_internet, 
+			INTERNET_OPTION_HTTP_DECODING, 
+			&bHttpDecoding, 
+			sizeof(bHttpDecoding) );
 		if (h_connection)
 		{
 			HINTERNET	h_request;
 
-			h_request = HttpOpenRequest(
-				h_connection, TEXT("GET"), TEXT("/"), 0, 0, 0, 0, 0
-				);
+			h_request = HttpOpenRequest(h_connection, TEXT("GET"), TEXT("/"), 0, 0, 0, 0, 0);
 
 			if (h_request) {
-				if (HttpSendRequest(h_request, 0, 0, 0, 0))
-				{
+				if (HttpSendRequest(h_request, 0, 0, 0, 0)) {
 					result = 1;
-					char szSizeBuffer[32];
-					//DWORD dwLengthSizeBuffer = sizeof(szSizeBuffer), dwFileSize; 
-					//BOOL bQuery = HttpQueryInfoA(h_request,HTTP_QUERY_CONTENT_LENGTH, szSizeBuffer, &dwLengthSizeBuffer, NULL) ;
-					//if(bQuery==TRUE) {
-						//dwFileSize=atol(szSizeBuffer);
-						DWORD dwFileSize = 1024*1024;
-						LPSTR szContents = new CHAR[dwFileSize];
-						DWORD dwBytesRead;
-						BOOL bRead;
-						while(bRead = InternetReadFile(h_request, szContents, dwFileSize, &dwBytesRead)) {
-							if(!dwBytesRead) break;
-							result = 2;
-							char* buf = szContents;
-							printf("***\t%d bytes\t***\n", dwBytesRead);
-							const size_t total_cols = 80, cols = 16;
-							size_t columns = cols, rows = dwBytesRead/columns + (dwBytesRead%columns? 1: 0);
-							if(dwBytesRead>0 && rows==0) rows = 1;
-							char* output = new char[rows*total_cols], *_output = output;
-							for(size_t i=0; i<rows; i++) {
-								for(size_t j=0; j<columns; j++) {
-									size_t k = i*columns+j;
-									UCHAR symbol = 0;
-									if(k < dwBytesRead) 
-										symbol = (UCHAR)buf[k];
+//					char szSizeBuffer[32];
+					DWORD dwFileSize = 1024*1024;
+					LPSTR szContents = new CHAR[dwFileSize];
+					DWORD dwBytesRead;
+					BOOL bRead;
+					while(bRead = InternetReadFile	(
+									h_request, 
+									szContents, 
+									dwFileSize, 
+									&dwBytesRead	
+					)) {
+						if(!dwBytesRead) break;
+						result = 2;
+						char* buf = szContents;
+						printf("***\t%d bytes\t***\n", dwBytesRead);
+						const size_t total_cols = 80, cols = 16;
+						size_t columns = cols, 
+							rows = dwBytesRead/columns + (dwBytesRead%columns? 1: 0);
+						if(dwBytesRead>0 && rows==0) rows = 1;
+						char* output = new char[rows*total_cols], *_output = output;
+						for(size_t i=0; i<rows; i++) {
+							for(size_t j=0; j<columns; j++) {
+								size_t k = i*columns+j;
+								UCHAR symbol = 0;
+								if(k < dwBytesRead) 
+									symbol = (UCHAR)buf[k];
 
-									if(isprint(symbol)) {
-										if(isspace(symbol))
-											output+=sprintf(output, " ");
-										else output+=sprintf(output, "%c", symbol);
-									}
-									else output+=sprintf(output, ".");
-									//printf(" ");
+								if(isprint(symbol)) {
+									if(isspace(symbol))
+										output+=sprintf(output, " ");
+									else output+=sprintf(output, "%c", symbol);
 								}
-								output += sprintf(output, "\t");
-								for(size_t j=0; j<columns; j++) {
-									size_t k = i*columns+j;
-									if(k >= dwBytesRead) break;
-
-									output+=sprintf(output, "%02x ", (UCHAR)buf[k]);
-								}
-								output+=sprintf(output, "\n");
+								else output+=sprintf(output, ".");
+								//printf(" ");
 							}
-							printf("%s\n***\t***\n", _output);
-							delete[] _output;
-						} /*else {
-							_error_message(L"InternetReadFile");
-						}*/
-					/*} else {
-						_error_message(L"HttpQueryInfo");
-					}*/
+							output += sprintf(output, "\t");
+							for(size_t j=0; j<columns; j++) {
+								size_t k = i*columns+j;
+								if(k >= dwBytesRead) break;
+
+								output+=sprintf(output, "%02x ", (UCHAR)buf[k]);
+							}
+							output+=sprintf(output, "\n");
+						}
+						printf("%s\n***\t***\n", _output);
+						delete[] _output;
+					} 
 				} else {
 					_error_message(L"HttpSendRequest");
 				}				
@@ -144,13 +145,13 @@ static int _check_network()
 	return result;
 }
 
-int _tmain1(int argc, _TCHAR* argv[])
+int _tmain(int argc, _TCHAR* argv[])
 {
 	char s[256];
 	int i=0;
 	sprintf(s, "nethk test PID=%d", GetCurrentProcessId());
 	SetConsoleTitleA(s);			
-	
+#ifdef USE_NETHK	
 	HMODULE m = NULL;
 	if(i%2==0 && argc > 1) {
 		m = LoadLibrary(argv[1]);
@@ -158,7 +159,7 @@ int _tmain1(int argc, _TCHAR* argv[])
 			printf("cannot load nethk.dll\n");
 		} else printf("***\tloaded nethk.dll\t***\n");
 	}
-
+#endif
 	while(true) {
 /*#ifdef USE_NETHK
 		HMODULE m = NULL;
@@ -171,7 +172,7 @@ int _tmain1(int argc, _TCHAR* argv[])
 #endif*/
 		printf("sending request (%d): \n", i++);
 		char* s;
-		int r = _check_network();
+		int r = _http_request(L"habrahabr.ru");
 		if(r==0) s="ERROR";
 		else if(r==1) s="NO CONTENT";
 		else s="OK";
@@ -183,7 +184,7 @@ int _tmain1(int argc, _TCHAR* argv[])
 			} else printf("***\tunloaded nethk.dll\t***\n");
 		}
 #endif*/
-		Sleep(1000);
+		Sleep(5000);
 	}
 	return 0;
 }

@@ -48,7 +48,7 @@ int mincrt_init(size_t initial_mem_len);
  *	If the function fails, the return value is zero.
  */
 int mincrt_deinit();
-
+void _error_message(wchar_t* lpszFunction);
 //-----------------------------------------------------------------------------
 
 #ifdef __cplusplus
@@ -56,12 +56,7 @@ int mincrt_deinit();
 #endif
 
 //-----------------------------------------------------------------------------
-#ifdef _DEBUG_MHOOK
-#include <assert.h>
-#else
-#undef assert
-#define assert(a)
-#endif
+#define assert(e) if(!(e)) { odprintfA("FATAL: assertion %s failed", #e); DebugBreak(); }
 
 
 #ifndef ODPRINTF
@@ -73,11 +68,13 @@ int mincrt_deinit();
 #if defined(_TRACE_FILE)
 extern FILE* _log;
 #endif
+extern CRITICAL_SECTION CriticalSection;
 __inline void odprintfA(PCSTR format, ...) {
-	static CHAR _buf[1024];		// this is the maximum size supported by wvsprintf
+	CHAR _buf[1024];		// this is the maximum size supported by wvsprintf
 	va_list	args;	
 	int len;
 	va_start(args, format);	
+	//EnterCriticalSection(&CriticalSection);
 	len = wvsprintfA(_buf, format, args);//wvnsprintfA(_buf, 256-2, format, args);
 	if (len > 0) {
 		_buf[len++] = '\r';
@@ -89,13 +86,15 @@ __inline void odprintfA(PCSTR format, ...) {
 		fflush(_log);
 #endif
 	}
+	//LeaveCriticalSection(&CriticalSection);
 }
 
 __inline void odprintfW(PCWSTR format, ...) {
-	static WCHAR _buf[1024];	// this is the maximum size supported by wvsprintf
+	WCHAR _buf[1024];	// this is the maximum size supported by wvsprintf
 	va_list	args;	
 	int len;
 	va_start(args, format);	
+	//EnterCriticalSection(&CriticalSection);
 	len = wvsprintfW(_buf, format, args);//wvnsprintfW(_buf, 256-2, format, args);
 	if (len > 0) {
 		_buf[len++] = L'\r';
@@ -107,7 +106,9 @@ __inline void odprintfW(PCWSTR format, ...) {
 		fflush(_log);
 #endif
 	}
+	//LeaveCriticalSection(&CriticalSection);
 }
+
 
 #else
 #define ODPRINTF(a) NULL

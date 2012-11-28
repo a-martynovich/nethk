@@ -17,10 +17,49 @@
 #define CODE_MODE	X86IM_IO_MODE_32BIT
 #endif
 
-#if defined(_TRACE) && defined(_TRACE_FILE)
-FILE* _log;
-#endif
+static LPWSPPROC_TABLE _find_sockproctable_simple() {
+	HMODULE hMswsock=LoadLibrary(L"mswsock.dll");
+	PIMAGE_DOS_HEADER pDosHeader;
+	PIMAGE_NT_HEADERS pNtHeaders;
+	PIMAGE_SECTION_HEADER pDataSection, pCodeSection;
+	LPWSPPROC_TABLE SockProcTable;
+	DWORD	i, c=0;	
+	UINT_PTR addr;
 
+	if(!hMswsock)
+		return 0;
+
+	pDosHeader=(PIMAGE_DOS_HEADER)hMswsock;
+	pNtHeaders=(PIMAGE_NT_HEADERS)((PBYTE)pDosHeader->e_lfanew + (UINT_PTR)pDosHeader);
+
+	// The code ('.text') section is always first
+	pCodeSection = (PIMAGE_SECTION_HEADER)((PBYTE)pNtHeaders+sizeof(IMAGE_NT_HEADERS));
+	// We also need to find '.data' section. It could be 3rd or 4th. 
+	for(i=1; i<pNtHeaders->FileHeader.NumberOfSections; i++) {
+		pDataSection=(PIMAGE_SECTION_HEADER)((PBYTE)pNtHeaders
+			+sizeof(IMAGE_NT_HEADERS) + 
+			i*sizeof(IMAGE_SECTION_HEADER));	
+		if(!strcmp(pDataSection->Name, ".data"))
+			break;
+		else pDataSection = 0;
+	}
+	if(!pDataSection) {
+		_error_message(L"find_sockproctable_simple(): cannot find .data section!");
+		DebugBreak();
+	}
+
+	for(i = 0; i<pDataSection->Misc.VirtualSize; i+=sizeof(UINT_PTR)) {
+		addr = *((PUINT_PTR)((PBYTE)hMswsock+pDataSection->VirtualAddress+i));
+		if((LPVOID)addr > pCodeSection && (LPVOID)addr < pCodeSection+(UINT_PTR)pCodeSection->Misc.VirtualSize) {
+			c++;
+		} else c=0;
+		if(c==30) {
+			SockProcTable = (LPWSPPROC_TABLE)((PBYTE)hMswsock+pDataSection->VirtualAddress+i-29*sizeof(UINT_PTR));
+			break;
+		}
+	}
+	return SockProcTable;
+}
 #include "disasm/disasm.h"
 #ifdef _M_X64
 
@@ -125,11 +164,12 @@ LPWSPPROC_TABLE get_sockproctable()
 
 	if (h_mswsock)
 	{
-		void* p_WSPStartup = GetProcAddress(h_mswsock, "WSPStartup");
+		/*void* p_WSPStartup = GetProcAddress(h_mswsock, "WSPStartup");
 
 		if (p_WSPStartup) {			
 			result = _find_sockproctable(p_WSPStartup);
-		}
+		}*/
+		result = _find_sockproctable_simple();
 	}
 
 	return result;

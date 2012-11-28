@@ -13,6 +13,7 @@ static HANDLE	m_h_heap;
 
 int _mincrt_mem_init(size_t initial_mem_len)
 {
+#ifdef MINCRT
 	m_heap_created = 1;
 
 	m_h_heap = HeapCreate(0, initial_mem_len, 0);
@@ -25,12 +26,16 @@ int _mincrt_mem_init(size_t initial_mem_len)
 	}
 
 	return (m_h_heap != 0);
+#else
+	return TRUE;
+#endif // MINCRT
 }
 
 //-----------------------------------------------------------------------------
 
 int _mincrt_mem_deinit()
 {
+#ifdef MINCRT
 	int	result = 0;
 
 	if ((m_heap_created) && (m_h_heap))
@@ -42,9 +47,16 @@ int _mincrt_mem_deinit()
 	}
 
 	return result;
+#else
+	return TRUE;
+#endif // MINCRT
 }
-
-//-----------------------------------------------------------------------------
+void* mem_zalloc(size_t mem_size) {
+	void* mem = mem_alloc(mem_size);
+	ZeroMemory(mem, mem_size);
+	return mem;
+}
+#ifdef MINCRT
 
 void* mem_alloc(size_t mem_size)
 {
@@ -146,7 +158,6 @@ void* memset(void* p_mem, int new_val, size_t mem_len) {
 	return p_mem;
 }
 
-// memmove is defined first so it will use the intrinsic memcpy
 void * mem_move(void * dst, const void * src, size_t count) {
 	void * ret = dst;
 
@@ -175,5 +186,4 @@ void * mem_move(void * dst, const void * src, size_t count) {
 	return(ret);
 }
 
-
-//=============================================================================
+#endif

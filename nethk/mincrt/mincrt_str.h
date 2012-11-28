@@ -13,8 +13,7 @@
 extern "C" {
 #endif
 
-//-----------------------------------------------------------------------------
-
+#ifdef MINCRT
 size_t str_len(const char* sz_src);
 size_t str_len_w(const wchar_t* sz_src);
 
@@ -27,6 +26,7 @@ void str_cat_w(wchar_t* sz_dst, const wchar_t* sz_src, size_t src_sz_len);
 int str_cmp(
 	const char* sz_1, const char* sz_2, size_t len_1, size_t len_2
 	);
+int str_icmp(const char* sz_1, const char* sz_2);
 int str_cmp_w(
 	const wchar_t* sz_1, const wchar_t* sz_2, size_t len_1, size_t len_2
 	);
@@ -52,7 +52,23 @@ const char * str_chr (const char * string, int ch);
 int str_isspace(int c);
 unsigned long str_toul (const char *nptr, char **endptr,int ibase);
 int str_isprint(int c);
-//-----------------------------------------------------------------------------
+char * str_tok (char * string, const char * control);
+#else
+#include <stdio.h>
+#include <string.h>
+#define str_len strlen
+#define str_cpy strcpy
+#define str_cmp(a,b,c,d) strcmp(a,b)
+#define str_icmp(a,b) stricmp(a,b)
+#define str_str strstr
+#define a_to_i atoi
+//#define str_isprint isprint
+int str_isprint(int c);
+#define str_isspace isspace
+#define str_toul strtoul
+#define str_tok strtok
+#define str_chr strchr
+#endif
 
 #ifdef __cplusplus
 }

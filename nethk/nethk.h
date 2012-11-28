@@ -5,6 +5,8 @@
  * purpose:		nethk API declaration
  */
 
+#define THREAD_SAFE(b)
+
 /*
  * nethk_install: 
  *	Installs runtime code hooks on all WinAPI WSP* functions. All the hooks are 
@@ -51,10 +53,13 @@ typedef struct _OPERATION {
 	LPWSABUF lpBuffers;
 	DWORD dwBufferCount;
 	LPDWORD lpNumberOfBytesRecvd;
+	DWORD dwBytesToRecv;
 
 	LPWSAOVERLAPPED lpOverlapped;
 	LPVOID lpOverlapped_Pointer;
+	HANDLE lpOverlapped_hEvent;
 	LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine;
+	LPWSATHREADID lpThreadId;
 
 	LPINT lpErrno;
 
@@ -75,7 +80,7 @@ typedef struct _OPERATION {
  *   FI_FILTER: the callback has modified the data. No other callbacks will be called.
  *   FI_QUEUE: the callback wants more data in queue. No other callbacks will be called. 
  */
-typedef enum nethk_filter (*nethk_filter_func_t)(const nethk_operation*);
+typedef enum nethk_filter (*nethk_filter_func_t)(nethk_operation*);
 
 /*
  * struct nethk_handler:
@@ -93,6 +98,12 @@ typedef struct _nethk_handler {
 	struct _nethk_handler* next;	
 } nethk_handler;
 
+typedef struct ring_buffer *LPRINGBUFFER;
+typedef struct {
+	SOCKET s;
+	LPRINGBUFFER rb_in, rb_out;
+	void* userdata;
+} nethk_sockbuf;
 /*
  * nethk_add_handler:
  *   Add a handler to the end of the handlers list.
@@ -128,7 +139,7 @@ enum nethk_error nethk_get_data(const nethk_operation* op, BYTE* buf, LPDWORD le
  *   E_SUCCESS on success; E_INVALID_ARG if op is invalid; E_DATA_TRUNCATED if 
  *   the length of buf is more than the length of the buffer of the operation.
  */
-enum nethk_error nethk_set_data(nethk_operation* op, BYTE* buf, DWORD buflen);
+enum nethk_error nethk_set_data(nethk_operation* op, BYTE* buf, LPDWORD lpBuflen);
 
 /*
  * nethk_get_operation:
@@ -154,3 +165,18 @@ enum nethk_error nethk_get_address_string(const nethk_operation* op, WCHAR* addr
  *   E_SUCCESS on success; E_INVALID_ARG if either op or addrlen is invalid.
  */
 enum nethk_error nethk_get_address(const nethk_operation* op, struct sockaddr* lpAddr, LPDWORD addrlen);
+
+/*
+ * _get_sockbuf: 
+ *	Returns a nethk_sockbuf object containing two ring buffers. The first, rb_in,
+ *	is to use be handlers. The second, rb_out, is to use by nethk. When a handler
+ *	receives data it can store it in rb_in. When it is done with data accumulated
+ *	in rb_in, it should clear rb_in and write it to rb_out, so that the data could
+ *	be given to an application.
+ *	The object exists for every socket. But there is a limited number of sockets
+ *	for which the objects exist simultaneously (NETHK_OPERATIONS_N). You will get
+ *	a NULL instead of nethk_sockbuf if there're too much nethk_sockbuf objects.
+ * Returns: 
+ *	A nethk_sockbuf object if possible; NULL otherwise.
+ */
+nethk_sockbuf* _get_sockbuf(SOCKET s);
